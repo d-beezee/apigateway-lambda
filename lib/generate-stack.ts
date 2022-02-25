@@ -1,20 +1,34 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import { Effect, PolicyDocument, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
-import { Runtime } from 'aws-cdk-lib/aws-lambda';
-import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
-import { Topic } from 'aws-cdk-lib/aws-sns';
-import { SqsSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
-import { Queue } from 'aws-cdk-lib/aws-sqs';
-import { Construct } from 'constructs';
-import * as path from 'path';
+import { Duration, Stack, StackProps } from "aws-cdk-lib";
+import {
+  Effect,
+  PolicyDocument,
+  PolicyStatement,
+  Role,
+  ServicePrincipal,
+} from "aws-cdk-lib/aws-iam";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { Bucket } from "aws-cdk-lib/aws-s3";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { SqsSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
+import { Queue } from "aws-cdk-lib/aws-sqs";
+import { Construct } from "constructs";
+import * as path from "path";
 
-require("dotenv").config();
+import { StackConfig } from "../interfaces/stack-settings";
 
 export class QueuedLambdaStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props?: StackProps,
+    config?: StackConfig
+  ) {
     super(scope, id, props);
+
+    //Check environment type
+    const isProd = config?.env === "prod";
 
     // Create queue and topic
     const queue = new Queue(this, "Queue");
@@ -22,12 +36,12 @@ export class QueuedLambdaStack extends Stack {
     topic.addSubscription(new SqsSubscription(queue));
 
     // Create bucket
-    const bucket = new Bucket(this, `${process.env.PROJECT_NAME || ""}-bucket`);
+    const bucket = new Bucket(this, `${config?.projectName}-bucket`);
 
     // create a role to allow the lambda to write to the bucket
     const lambdaBucketWriteRole = new Role(
       this,
-      `${process.env.PROJECT_NAME || ""}-role`,
+      `${config?.projectName}-role`,
       {
         assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
         managedPolicies: [
@@ -37,7 +51,7 @@ export class QueuedLambdaStack extends Stack {
           },
         ],
         inlinePolicies: {
-          "receipt-bucket-policy": new PolicyDocument({
+          "bucket-policy": new PolicyDocument({
             statements: [
               new PolicyStatement({
                 actions: ["s3:PutObject", "s3:PutObjectAcl"],
@@ -50,21 +64,17 @@ export class QueuedLambdaStack extends Stack {
       }
     );
     // Create a lambda function to process the queue
-    const lambda = new NodejsFunction(
-      this,
-      `${process.env.PROJECT_NAME || ""}-lambda`,
-      {
-        memorySize: 1024,
-        timeout: Duration.seconds(5),
-        runtime: Runtime.NODEJS_14_X,
-        handler: "main",
-        role: lambdaBucketWriteRole,
-        entry: path.join(__dirname, `/../lambda/index.ts`),
-        environment: {
-          BUCKET_NAME: bucket.bucketName,
-        },
-      }
-    );
+    const lambda = new NodejsFunction(this, `${config?.projectName}-lambda`, {
+      memorySize: isProd ? 1024 : 512,
+      timeout: Duration.seconds(5),
+      runtime: Runtime.NODEJS_14_X,
+      handler: "main",
+      role: lambdaBucketWriteRole,
+      entry: path.join(__dirname, `/../lambda/index.ts`),
+      environment: {
+        BUCKET_NAME: bucket.bucketName,
+      },
+    });
 
     // Add the queue as an event source to the lambda that will process messages one at a time
     lambda.addEventSource(
