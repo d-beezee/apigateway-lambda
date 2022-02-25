@@ -1,4 +1,4 @@
-import { APIGatewayProxyResultV2, SQSEvent } from 'aws-lambda';
+import { APIGatewayProxyResultV2, SQSEvent } from "aws-lambda";
 
 export async function main(event: SQSEvent): Promise<APIGatewayProxyResultV2> {
   const messages = event.Records.map((record) => {
