@@ -3,12 +3,12 @@ import "source-map-support/register";
 
 import * as cdk from "aws-cdk-lib";
 
-import { QueuedLambdaStack } from "../lib/generate-stack";
+import { TimedLambdaStack } from "../lib/generate-stack";
 
 require("dotenv").config();
 
 const app = new cdk.App();
-new QueuedLambdaStack(
+new TimedLambdaStack(
   app,
   `${process.env.PROJECT_NAME || ""}-stack`,
   {

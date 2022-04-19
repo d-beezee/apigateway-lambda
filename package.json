@@ -10,9 +10,12 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
+    "cdk:ls": "cdk --app cdk.out ls",
     "build:lambda": "cd lambda && npm run build",
     "bootstrap": "cdk bootstrap",
-    "deploy": "npm run build:lambda && cdk deploy GenerateReceiptStack"
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy",
+    "execute": "npm run build && node execute/index.js"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.92",
