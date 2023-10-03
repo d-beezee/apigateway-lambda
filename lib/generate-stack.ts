@@ -1,28 +1,28 @@
-import { Duration, Stack, StackProps } from "aws-cdk-lib";
-import { Rule, Schedule } from "aws-cdk-lib/aws-events";
-import * as targets from "aws-cdk-lib/aws-events-targets";
+import { Duration, Stack } from "aws-cdk-lib";
 import { Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
-import { Runtime } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import * as path from "path";
 
-import { StackConfig } from "../interfaces/stack-settings";
+import {
+  Cors,
+  LambdaIntegration,
+  MethodLoggingLevel,
+  RestApi,
+} from "aws-cdk-lib/aws-apigateway";
 
-export class TimedLambdaStack extends Stack {
-  constructor(
-    scope: Construct,
-    id: string,
-    props?: StackProps,
-    config?: StackConfig
-  ) {
-    super(scope, id, props);
+const PROJECT_NAME = "lambda-apigateway";
+const region = "eu-west-1";
 
-    //Check environment type
-    const isProd = config?.env === "prod";
-
+export class ApiGatewayLambdaStack extends Stack {
+  constructor(scope: Construct) {
+    super(scope, `${PROJECT_NAME}-stack`, {
+      env: {
+        region,
+      },
+    });
     // create a role for the lambda
-    const lambdaRole = new Role(this, `${config?.projectName}-role`, {
+    const lambdaRole = new Role(this, `${PROJECT_NAME}-role`, {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       managedPolicies: [
         {
@@ -32,22 +32,31 @@ export class TimedLambdaStack extends Stack {
       ],
     });
     // Create a lambda function to process the queue
-    const lambda = new NodejsFunction(this, `${config?.projectName}-lambda`, {
-      memorySize: isProd ? 1024 : 512,
+    const lambda = new Function(this, `${PROJECT_NAME}-lambda`, {
+      memorySize: 1024,
       timeout: Duration.seconds(5),
-      runtime: Runtime.NODEJS_14_X,
-      handler: "main",
+      runtime: Runtime.PYTHON_3_8,
+      handler: "main.main",
       role: lambdaRole,
-      entry: path.join(__dirname, `/../lambda/index.ts`),
+      code: Code.fromAsset(path.join(__dirname, `/../lambda`)),
     });
-    const lambdaTarget = new targets.LambdaFunction(lambda);
 
-    // Create eventbridge rule with schedule once a day
-    const rule = new Rule(this, "ScheduleRule", {
-      schedule: Schedule.rate(Duration.days(1)),
-      enabled: true,
-      description: "Schedule for timed lambda",
-      targets: [lambdaTarget],
+    const api = new RestApi(this, `LambdaApiGateway`, {
+      restApiName: `lambda-api`,
+      deployOptions: {
+        metricsEnabled: true,
+        loggingLevel: MethodLoggingLevel.INFO,
+        dataTraceEnabled: true,
+      },
+      cloudWatchRole: true,
+      defaultCorsPreflightOptions: {
+        allowOrigins: Cors.ALL_ORIGINS,
+        allowMethods: ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        allowHeaders: Cors.DEFAULT_HEADERS,
+      },
     });
+
+    const resultsResource = api.root.addResource("results");
+    resultsResource.addMethod("POST", new LambdaIntegration(lambda));
   }
 }
